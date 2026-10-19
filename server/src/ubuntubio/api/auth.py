@@ -22,6 +22,7 @@ from ubuntubio.api.schemas import (
     TokenCreatedResponse,
 )
 from ubuntubio.auth.pat import create_personal_access_token, revoke_token
+from ubuntubio.auth.username import generate_unique_username
 from ubuntubio.config import settings
 from ubuntubio.core.logging import get_logger
 from ubuntubio.db.models import DeviceAuthorizationModel, PersonalAccessTokenModel, UserModel
@@ -58,6 +59,7 @@ class UserResponse(BaseModel):
     id: str
     orcid_id: str
     name: str
+    username: str | None = None
     email: str | None
 
 
@@ -201,13 +203,18 @@ async def orcid_callback(
     user = res.scalar_one_or_none()
 
     if not user:
+        username = await generate_unique_username(session, name, orcid_id)
         user = UserModel(
             orcid_id=orcid_id,
             name=name,
+            username=username,
         )
         session.add(user)
         await session.commit()
         await session.refresh(user)
+    elif not user.username:
+        user.username = await generate_unique_username(session, name, orcid_id)
+        await session.commit()
 
     # Mint session token
     raw_token, token_record = await create_personal_access_token(
@@ -262,14 +269,19 @@ async def dev_login(
     user = res.scalar_one_or_none()
 
     if not user:
+        username = await generate_unique_username(session, payload.name, payload.orcid_id)
         user = UserModel(
             orcid_id=payload.orcid_id,
             name=payload.name,
+            username=username,
             email=payload.email,
         )
         session.add(user)
         await session.commit()
         await session.refresh(user)
+    elif not user.username:
+        user.username = await generate_unique_username(session, payload.name, payload.orcid_id)
+        await session.commit()
 
     raw_token, token_record = await create_personal_access_token(
         session=session,

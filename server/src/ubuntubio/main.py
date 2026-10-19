@@ -6,11 +6,13 @@ from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from ubuntubio import __version__
 from ubuntubio.api import auth, cas, gated, git, lfs, orgs, repos, search
 from ubuntubio.auth.cas_tokens import CasTokenManager
+from ubuntubio.auth.username import extract_orcid_suffix, slugify_researcher_name
 from ubuntubio.config import settings
 from ubuntubio.core.logging import get_logger, request_id_ctx, setup_logging
 from ubuntubio.db import session as db_session
@@ -81,6 +83,30 @@ class RequestLoggingMiddleware:
             request_id_ctx.reset(token)
 
 
+async def migrate_users_table(conn: Any) -> None:
+    """Ensure username column exists on users table and backfill existing users."""
+    res = await conn.execute(text("PRAGMA table_info(users)"))
+    columns = [row[1] for row in res.fetchall()]
+    if "username" not in columns:
+        await conn.execute(text("ALTER TABLE users ADD COLUMN username VARCHAR(64)"))
+        logger.info("Added username column to users table")
+
+    users_res = await conn.execute(
+        text("SELECT id, name, orcid_id FROM users WHERE username IS NULL")
+    )
+    for user_row in users_res.fetchall():
+        uid, name, orcid_id = user_row[0], user_row[1], user_row[2]
+        base_slug = slugify_researcher_name(name)
+        orcid_suffix = extract_orcid_suffix(orcid_id)
+        chk = await conn.execute(text("SELECT id FROM users WHERE username = :u"), {"u": base_slug})
+        chosen = base_slug if chk.scalar_one_or_none() is None else f"{base_slug}-{orcid_suffix}"
+        await conn.execute(
+            text("UPDATE users SET username = :u WHERE id = :id"),
+            {"u": chosen, "id": uid},
+        )
+        logger.info("Backfilled username for user", extra={"user_id": uid, "username": chosen})
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan context manager for schema initialization and cleanup."""
@@ -88,9 +114,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         "Initializing UbuntuBio Hub API server",
         extra={"version": __version__, "env": settings.ENV},
     )
-    # Auto-provision relational tables and FTS5 search indexes
+    # Auto-provision relational tables, migrations, and FTS5 search indexes
     async with db_session.engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await migrate_users_table(conn)
         await init_fts_tables(conn)
     logger.info("Database schemas and FTS5 search tables initialized successfully")
     yield

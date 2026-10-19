@@ -43,6 +43,7 @@ class UserModel(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
     orcid_id: Mapped[str] = mapped_column(String(19), unique=True, index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    username: Mapped[str | None] = mapped_column(String(64), unique=True, index=True, nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 

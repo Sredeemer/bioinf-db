@@ -20,7 +20,7 @@ from ubuntubio.api.schemas import (
 )
 from ubuntubio.auth.authz import AuthorizationService, RepoAction
 from ubuntubio.core.logging import get_logger
-from ubuntubio.db.models import RepositoryModel, UserModel
+from ubuntubio.db.models import OrganizationModel, RepositoryModel, UserModel
 from ubuntubio.db.session import get_db_session
 from ubuntubio.git.repo_manager import GitRepoManager
 
@@ -48,21 +48,50 @@ async def create_repository(
             detail=f"Repository '{slug}' already exists.",
         )
 
-    # Validate ownership permissions
+    # Validate ownership permissions and prevent namespace collision/squatting
     owner_id = user.id
-    if payload.owner_type == "org":
+    owner_type = payload.owner_type
+
+    # 1. Prevent collision / impersonation of another registered researcher
+    user_stmt = select(UserModel).where(
+        (UserModel.username == payload.owner_slug) | (UserModel.orcid_id == payload.owner_slug)
+    )
+    user_res = await session.execute(user_stmt)
+    target_user = user_res.scalar_one_or_none()
+
+    if target_user and target_user.id != user.id:
+        expected = user.username or user.orcid_id
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Cannot create repository under namespace '{payload.owner_slug}'. "
+                "That handle belongs to another registered researcher. "
+                f"Your namespace is '{expected}'."
+            ),
+        )
+
+    # 2. Prevent unauthorized creation under existing organizations
+    org_stmt = select(OrganizationModel).where(OrganizationModel.slug == payload.owner_slug)
+    org_res = await session.execute(org_stmt)
+    target_org = org_res.scalar_one_or_none()
+
+    if target_org or payload.owner_type == "org":
         role = await authz_service.is_org_member(session, user.id, payload.owner_slug)
         if role not in ("admin", "write"):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Write permission required in organization '{payload.owner_slug}'.",
             )
+        owner_type = "org"
         owner_id = payload.owner_slug
+    else:
+        owner_type = "user"
+        owner_id = user.id
 
     repo = RepositoryModel(
         slug=slug,
         name=payload.name,
-        owner_type=payload.owner_type,
+        owner_type=owner_type,
         owner_id=owner_id,
         description=payload.description,
         domain=payload.domain,
