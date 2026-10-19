@@ -158,6 +158,7 @@ Sample malaria dataset from Accra.
     subprocess.run(
         ["git", "-C", str(work_tree), "commit", "-m", "Initial commit: README"], check=True
     )
+    subprocess.run(["git", "-C", str(work_tree), "branch", "-M", "main"], check=True)
     subprocess.run(["git", "-C", str(work_tree), "push", "origin", "main"], check=True)
 
     # 1. Inspect Commits

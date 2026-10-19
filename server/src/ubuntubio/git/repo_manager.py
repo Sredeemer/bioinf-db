@@ -42,9 +42,9 @@ class GitRepoManager:
         )
         repo_path.mkdir(parents=True, exist_ok=True)
 
-        # Run git init --bare
+        # Run git init --bare with default branch 'main'
         subprocess.run(
-            ["git", "init", "--bare", str(repo_path)],
+            ["git", "init", "--bare", "--initial-branch=main", str(repo_path)],
             check=True,
             capture_output=True,
             text=True,
