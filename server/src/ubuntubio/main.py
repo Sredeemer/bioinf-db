@@ -37,9 +37,7 @@ class RequestLoggingMiddleware:
         headers_dict = dict(scope.get("headers", []))
         req_id_bytes = headers_dict.get(b"x-request-id")
         req_id = (
-            req_id_bytes.decode("ascii", errors="ignore")
-            if req_id_bytes
-            else uuid.uuid4().hex[:16]
+            req_id_bytes.decode("ascii", errors="ignore") if req_id_bytes else uuid.uuid4().hex[:16]
         )
         token = request_id_ctx.set(req_id)
         start_time = time.perf_counter()

@@ -395,9 +395,7 @@ class SqliteSearchService:
         base_params: dict[str, Any],
     ) -> dict[str, dict[str, int]]:
         """Compute faceted distribution counts for domain, countries, genus, family, access."""
-        join_clause = (
-            "JOIN datasets_fts ON datasets_fts.repo_id = r.repo_id" if fts_query else ""
-        )
+        join_clause = "JOIN datasets_fts ON datasets_fts.repo_id = r.repo_id" if fts_query else ""
         fts_filter = "datasets_fts MATCH :fts_query AND " if fts_query else ""
         full_where = f"{fts_filter}{where_sql}"
 
@@ -626,9 +624,7 @@ class SqliteSearchService:
         base_params: dict[str, Any],
     ) -> dict[str, dict[str, int]]:
         """Compute sample facet distributions."""
-        join_clause = (
-            "JOIN samples_fts ON samples_fts.sample_id_str = s.id" if fts_query else ""
-        )
+        join_clause = "JOIN samples_fts ON samples_fts.sample_id_str = s.id" if fts_query else ""
         fts_filter = "samples_fts MATCH :fts_query AND " if fts_query else ""
         full_where = f"{fts_filter}{where_sql}"
 

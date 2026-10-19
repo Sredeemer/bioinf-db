@@ -111,9 +111,7 @@ class TextFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         req_id = getattr(record, "request_id", None) or "-"
-        timestamp = datetime.fromtimestamp(record.created, tz=UTC).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
+        timestamp = datetime.fromtimestamp(record.created, tz=UTC).strftime("%Y-%m-%d %H:%M:%S")
         msg = record.getMessage()
         base = f"[{timestamp}] [{record.levelname:<7}] [{record.name}] [{req_id}] {msg}"
 
