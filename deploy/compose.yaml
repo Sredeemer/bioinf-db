@@ -25,6 +25,7 @@ services:
       UBUNTUBIO_ORCID_BASE_URL: ${UBUNTUBIO_ORCID_BASE_URL:-https://sandbox.orcid.org}
       UBUNTUBIO_ORCID_TOKEN_URL: ${UBUNTUBIO_ORCID_TOKEN_URL:-https://sandbox.orcid.org/oauth/token}
       UBUNTUBIO_ORCID_AUTHORIZE_URL: ${UBUNTUBIO_ORCID_AUTHORIZE_URL:-https://sandbox.orcid.org/oauth/authorize}
+      UBUNTUBIO_ORCID_REDIRECT_URI: ${UBUNTUBIO_ORCID_REDIRECT_URI:-https://ubuntu-bio-web.vercel.app/api/auth/orcid/callback}
     volumes:
       - ${UBUNTUBIO_DATA_DIR:-./.data}:/srv/data
     ports:

@@ -112,10 +112,15 @@ async def delete_token(
 
 @router.get("/orcid/authorize")
 async def orcid_authorize(
+    request: Request,
     redirect_uri: str | None = None,
 ) -> RedirectResponse:
     """Redirect user agent to ORCID OAuth2 login dialog."""
-    callback = redirect_uri or f"{settings.API_URL}/api/auth/orcid/callback"
+    callback = (
+        redirect_uri
+        or (settings.ORCID_REDIRECT_URI if settings.ORCID_REDIRECT_URI else None)
+        or f"{settings.API_URL}/api/auth/orcid/callback"
+    )
     auth_url = (
         f"{settings.ORCID_AUTHORIZE_URL}?"
         f"client_id={settings.ORCID_CLIENT_ID}&"
@@ -130,10 +135,15 @@ async def orcid_authorize(
 async def orcid_callback(
     code: str,
     request: Request,
+    redirect_uri: str | None = None,
     session: AsyncSession = Depends(get_db_session),
 ) -> Any:
     """Exchange ORCID authorization code for token, upsert user, and mint session PAT."""
-    callback_uri = f"{settings.API_URL}/api/auth/orcid/callback"
+    callback_uri = (
+        redirect_uri
+        or (settings.ORCID_REDIRECT_URI if settings.ORCID_REDIRECT_URI else None)
+        or f"{settings.API_URL}/api/auth/orcid/callback"
+    )
     async with httpx.AsyncClient() as client:
         token_resp = await client.post(
             settings.ORCID_TOKEN_URL,

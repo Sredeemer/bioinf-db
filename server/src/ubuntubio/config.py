@@ -63,6 +63,10 @@ class Settings(BaseSettings):
     ORCID_BASE_URL: str = "https://sandbox.orcid.org"
     ORCID_TOKEN_URL: str = "https://sandbox.orcid.org/oauth/token"
     ORCID_AUTHORIZE_URL: str = "https://sandbox.orcid.org/oauth/authorize"
+    ORCID_REDIRECT_URI: str = Field(
+        default="",
+        validation_alias=AliasChoices("UBUNTUBIO_ORCID_REDIRECT_URI", "ORCID_REDIRECT_URI"),
+    )
 
 
 settings = Settings()
