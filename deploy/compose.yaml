@@ -1,0 +1,39 @@
+name: ubuntubio
+
+services:
+  # ── UbuntuBio Hub API (Self-Contained: SQLite + FTS5 Search) ──────────────
+  server:
+    build:
+      context: ../server
+      dockerfile: Dockerfile
+    container_name: ubuntubio_server
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-sqlite+aiosqlite:////srv/data/ubuntubio.db}
+      CAS_URL: ${CAS_URL:-http://52.19.144.208}
+      GIT_ROOT_DIR: /srv/data/git
+      TMP_STAGING_DIR: /srv/data/tmp
+      UBUNTUBIO_DATA_ROOT: /srv/data
+      UBUNTUBIO_GIT_ROOT: /srv/data/git
+      UBUNTUBIO_TMP_ROOT: /srv/data/tmp
+      UBUNTUBIO_LOG_FORMAT: json
+      UBUNTUBIO_LOG_LEVEL: INFO
+    volumes:
+      - ${UBUNTUBIO_DATA_DIR:-./.data}:/srv/data
+    ports:
+      - "8000:8000"
+
+  # ── Caddy Reverse Proxy & TLS ─────────────────────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    container_name: ubuntubio_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${UBUNTUBIO_DATA_DIR:-./.data}/caddy_data:/data
+      - ${UBUNTUBIO_DATA_DIR:-./.data}/caddy_config:/config
+    depends_on:
+      - server

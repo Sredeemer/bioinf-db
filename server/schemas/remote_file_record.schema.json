@@ -1,0 +1,30 @@
+{
+  "description": "Record representing a remote external file in remote_files.tsv.",
+  "properties": {
+    "filename": {
+      "minLength": 1,
+      "title": "Filename",
+      "type": "string"
+    },
+    "url": {
+      "title": "Url",
+      "type": "string"
+    },
+    "md5": {
+      "title": "Md5",
+      "type": "string"
+    },
+    "size_bytes": {
+      "title": "Size Bytes",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "filename",
+    "url",
+    "md5",
+    "size_bytes"
+  ],
+  "title": "RemoteFileRecord",
+  "type": "object"
+}

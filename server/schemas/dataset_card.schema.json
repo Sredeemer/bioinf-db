@@ -1,0 +1,81 @@
+{
+  "additionalProperties": true,
+  "description": "YAML front-matter specification for repository README.md.",
+  "properties": {
+    "title": {
+      "maxLength": 120,
+      "minLength": 5,
+      "title": "Title",
+      "type": "string"
+    },
+    "domain": {
+      "title": "Domain",
+      "type": "string"
+    },
+    "access": {
+      "enum": [
+        "public",
+        "gated",
+        "private"
+      ],
+      "title": "Access",
+      "type": "string"
+    },
+    "license": {
+      "maxLength": 64,
+      "minLength": 2,
+      "title": "License",
+      "type": "string"
+    },
+    "countries": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Countries",
+      "type": "array"
+    },
+    "taxon_ids": {
+      "items": {
+        "type": "integer"
+      },
+      "minItems": 1,
+      "title": "Taxon Ids",
+      "type": "array"
+    },
+    "data_types": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Data Types",
+      "type": "array"
+    },
+    "source": {
+      "additionalProperties": true,
+      "title": "Source",
+      "type": "object"
+    },
+    "benefit_sharing": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Benefit Sharing"
+    }
+  },
+  "required": [
+    "title",
+    "domain",
+    "access",
+    "license",
+    "countries",
+    "taxon_ids"
+  ],
+  "title": "DatasetCard",
+  "type": "object"
+}

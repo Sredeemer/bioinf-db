@@ -1,0 +1,75 @@
+# ==============================================================================
+# Separate Independent Repositories (managed in their own git repos)
+# ==============================================================================
+/web/
+/client-py/
+
+# ==============================================================================
+# Python & Environment Artifacts
+# ==============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Testing, static analysis & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# Rust artifacts
+target/
+
+# Node & Frontend artifacts
+node_modules/
+.next/
+/out/
+*.tsbuildinfo
+
+# Scratch & local exploration & runtime data
+scratch/
+*.local
+.env
+.env.*
+!.env.example
+.data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/

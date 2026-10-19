@@ -1,0 +1,136 @@
+# African Bioinformatics Domain Configurations
+# Enforces AU 54-state validation, MIxS schemas, and strictly excludes human Taxon 9606.
+
+version: "1.0"
+
+au_countries:
+  DZ: "Algeria"
+  AO: "Angola"
+  BJ: "Benin"
+  BW: "Botswana"
+  BF: "Burkina Faso"
+  BI: "Burundi"
+  CV: "Cabo Verde"
+  CM: "Cameroon"
+  CF: "Central African Republic"
+  TD: "Chad"
+  KM: "Comoros"
+  CG: "Congo"
+  CD: "Democratic Republic of the Congo"
+  CI: "Côte d'Ivoire"
+  DJ: "Djibouti"
+  EG: "Egypt"
+  GQ: "Equatorial Guinea"
+  ER: "Eritrea"
+  SZ: "Eswatini"
+  ET: "Ethiopia"
+  GA: "Gabon"
+  GM: "Gambia"
+  GH: "Ghana"
+  GN: "Guinea"
+  GW: "Guinea-Bissau"
+  KE: "Kenya"
+  LS: "Lesotho"
+  LR: "Liberia"
+  LY: "Libya"
+  MG: "Madagascar"
+  MW: "Malawi"
+  ML: "Mali"
+  MR: "Mauritania"
+  MU: "Mauritius"
+  MA: "Morocco"
+  MZ: "Mozambique"
+  NA: "Namibia"
+  NE: "Niger"
+  NG: "Nigeria"
+  RW: "Rwanda"
+  ST: "São Tomé and Príncipe"
+  SN: "Senegal"
+  SC: "Seychelles"
+  SL: "Sierra Leone"
+  SO: "Somalia"
+  ZA: "South Africa"
+  SS: "South Sudan"
+  SD: "Sudan"
+  TZ: "Tanzania"
+  TG: "Togo"
+  TN: "Tunisia"
+  UG: "Uganda"
+  ZM: "Zambia"
+  ZW: "Zimbabwe"
+
+domains:
+  viruses:
+    label: "Viruses of Public Health Concern"
+    description: "Endemic and epidemic viral pathogens in the African continent"
+    taxa:
+      - taxon_id: 11620
+        name: "Lassa mammarenavirus"
+        biocontainment: "BSL-4"
+        priority: "high"
+      - taxon_id: 186538
+        name: "Zaire ebolavirus"
+        biocontainment: "BSL-4"
+        priority: "high"
+      - taxon_id: 11269
+        name: "Marburg virus"
+        biocontainment: "BSL-4"
+        priority: "high"
+      - taxon_id: 10244
+        name: "Monkeypox virus"
+        biocontainment: "BSL-3"
+        priority: "high"
+      - taxon_id: 11089
+        name: "Yellow fever virus"
+        biocontainment: "BSL-3"
+        priority: "medium"
+      - taxon_id: 11588
+        name: "Rift Valley fever virus"
+        biocontainment: "BSL-3"
+        priority: "medium"
+      - taxon_id: 11587
+        name: "Crimean-Congo hemorrhagic fever orthonairovirus"
+        biocontainment: "BSL-4"
+        priority: "high"
+
+  amr_bacteria:
+    label: "Bacterial Pathogens & Antimicrobial Resistance"
+    description: "Clinical and surveillance bacterial isolates profiling resistance genotypes"
+    taxa:
+      - taxon_id: 666
+        name: "Vibrio cholerae"
+        biocontainment: "BSL-2"
+        priority: "high"
+      - taxon_id: 1773
+        name: "Mycobacterium tuberculosis"
+        biocontainment: "BSL-3"
+        priority: "high"
+      - taxon_id: 573
+        name: "Klebsiella pneumoniae"
+        biocontainment: "BSL-2"
+        priority: "high"
+      - taxon_id: 28901
+        name: "Salmonella enterica"
+        biocontainment: "BSL-2"
+        priority: "high"
+      - taxon_id: 1313
+        name: "Streptococcus pneumoniae"
+        biocontainment: "BSL-2"
+        priority: "medium"
+
+  vectors:
+    label: "Disease Vectors & Parasites"
+    description: "Arthropod disease vectors and eukaryotic parasites endemic to Africa"
+    taxa:
+      - taxon_id: 7165
+        name: "Anopheles gambiae"
+        biocontainment: "BSL-1"
+        priority: "high"
+      - taxon_id: 7159
+        name: "Aedes aegypti"
+        biocontainment: "BSL-1"
+        priority: "medium"
+      - taxon_id: 5833
+        name: "Plasmodium falciparum"
+        biocontainment: "BSL-2"
+        priority: "high"

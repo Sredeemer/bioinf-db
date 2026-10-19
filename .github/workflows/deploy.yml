@@ -1,0 +1,52 @@
+name: Deploy Backend (AWS Lightsail)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/**"
+      - "deploy/**"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ── Deploy Backend to AWS Lightsail via Docker Compose ──────────────────────
+  deploy-backend:
+    name: Deploy to AWS Lightsail (Docker Compose)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to Lightsail Server via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST || '52.19.144.208' }}
+          username: ${{ secrets.LIGHTSAIL_USER || 'ubuntu' }}
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            set -e
+            echo "==> Pulling latest changes from main branch..."
+            cd /srv/ubuntubio/app
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "==> Rebuilding and restarting server container..."
+            cd /srv/ubuntubio/app/deploy
+            docker compose up -d --build --no-deps server
+
+            echo "==> Reloading reverse proxy..."
+            docker compose restart caddy
+
+            echo "==> Pruning dangling docker build cache..."
+            docker image prune -f
+
+      - name: Verify Live Healthcheck Endpoint
+        run: |
+          SERVER_HOST="${{ secrets.LIGHTSAIL_HOST || '52.19.144.208' }}"
+          echo "Checking health endpoint at http://${SERVER_HOST}/healthz..."
+          curl --fail --retry 10 --retry-delay 3 --retry-all-errors "http://${SERVER_HOST}/healthz"

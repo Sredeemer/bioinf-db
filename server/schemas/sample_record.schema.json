@@ -1,0 +1,84 @@
+{
+  "description": "Single sample record from samples.tsv.",
+  "properties": {
+    "sample_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Sample Id",
+      "type": "string"
+    },
+    "taxon_id": {
+      "title": "Taxon Id",
+      "type": "integer"
+    },
+    "country": {
+      "title": "Country",
+      "type": "string"
+    },
+    "collection_date": {
+      "title": "Collection Date",
+      "type": "string"
+    },
+    "lat": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Lat"
+    },
+    "lon": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Lon"
+    },
+    "admin1": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Admin1"
+    },
+    "host": {
+      "title": "Host",
+      "type": "string"
+    },
+    "isolation_source": {
+      "title": "Isolation Source",
+      "type": "string"
+    },
+    "extra_fields": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Extra Fields",
+      "type": "object"
+    }
+  },
+  "required": [
+    "sample_id",
+    "taxon_id",
+    "country",
+    "collection_date",
+    "host",
+    "isolation_source"
+  ],
+  "title": "SampleRecord",
+  "type": "object"
+}

@@ -1,0 +1,78 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: ubuntubio-backend
+  labels:
+    cloud.googleapis.com/location: us-central1
+  annotations:
+    run.googleapis.com/launch-stage: BETA
+spec:
+  template:
+    metadata:
+      annotations:
+        # Second generation execution environment supporting GCS FUSE volume mounts
+        run.googleapis.com/execution-environment: gen2
+        # Restrict to single instance to ensure strict SQLite single-writer transactional consistency
+        autoscaling.knative.dev/maxScale: "1"
+        # Container dependency: ensure OpenXet CAS starts before API server
+        run.googleapis.com/container-dependencies: '{"server":["openxet"]}'
+    spec:
+      volumes:
+        - name: ubuntubio-data
+          csi:
+            driver: gcsfuse.run.googleapis.com
+            readOnly: false
+            volumeAttributes:
+              bucketName: ${STORAGE_BUCKET}
+      containers:
+        # Ingress Container: UbuntuBio FastAPI Server + Native SQLite FTS5 BM25 Engine
+        - name: server
+          image: ${IMAGE_SERVER}
+          ports:
+            - containerPort: 8000
+          env:
+            - name: UBUNTUBIO_ENV
+              value: "production"
+            - name: UBUNTUBIO_DEBUG
+              value: "false"
+            - name: UBUNTUBIO_DATABASE_URL
+              value: "sqlite+aiosqlite:////srv/data/ubuntubio.db"
+            - name: UBUNTUBIO_CAS_URL
+              value: "http://localhost:8080"
+            - name: UBUNTUBIO_DATA_ROOT
+              value: "/srv/data"
+            - name: UBUNTUBIO_GIT_ROOT
+              value: "/srv/data/git"
+            - name: UBUNTUBIO_TMP_ROOT
+              value: "/srv/data/tmp"
+            - name: UBUNTUBIO_LOG_FORMAT
+              value: "json"
+            - name: UBUNTUBIO_LOG_LEVEL
+              value: "INFO"
+          volumeMounts:
+            - name: ubuntubio-data
+              mountPath: /srv/data
+          resources:
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+
+        # Sidecar Container: OpenXet Content-Addressed Storage (Private Localhost)
+        - name: openxet
+          image: ghcr.io/ggoggam/openxet:latest
+          env:
+            - name: OPENXET_HOST
+              value: "0.0.0.0"
+            - name: OPENXET_PORT
+              value: "8080"
+            - name: OPENXET_DATA_DIR
+              value: "/srv/data/xet"
+            - name: OPENXET_AUTH_ENABLED
+              value: "false"
+          volumeMounts:
+            - name: ubuntubio-data
+              mountPath: /srv/data
+          resources:
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"

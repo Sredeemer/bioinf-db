@@ -1,0 +1,36 @@
+{
+    admin off
+}
+
+:80 {
+    # Health checks and status
+    handle /healthz {
+        reverse_proxy server:8000
+    }
+
+    # Backend API routes
+    handle /api/* {
+        reverse_proxy server:8000
+    }
+
+    # CAS OIDC & JWKS discovery documents
+    handle /.well-known/* {
+        reverse_proxy server:8000
+    }
+
+    # Interactive API documentation
+    handle /docs* {
+        reverse_proxy server:8000
+    }
+    handle /redoc* {
+        reverse_proxy server:8000
+    }
+    handle /openapi.json {
+        reverse_proxy server:8000
+    }
+
+    # Fallback to backend API root info
+    handle {
+        reverse_proxy server:8000
+    }
+}
