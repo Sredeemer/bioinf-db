@@ -18,6 +18,13 @@ services:
       UBUNTUBIO_TMP_ROOT: /srv/data/tmp
       UBUNTUBIO_LOG_FORMAT: json
       UBUNTUBIO_LOG_LEVEL: INFO
+      UBUNTUBIO_API_URL: ${UBUNTUBIO_API_URL:-http://52.19.144.208}
+      UBUNTUBIO_WEB_URL: ${UBUNTUBIO_WEB_URL:-https://ubuntu-bio-web.vercel.app}
+      UBUNTUBIO_ORCID_CLIENT_ID: ${UBUNTUBIO_ORCID_CLIENT_ID:-APP-0000000000000000}
+      UBUNTUBIO_ORCID_CLIENT_SECRET: ${UBUNTUBIO_ORCID_CLIENT_SECRET:-dev_orcid_secret}
+      UBUNTUBIO_ORCID_BASE_URL: ${UBUNTUBIO_ORCID_BASE_URL:-https://sandbox.orcid.org}
+      UBUNTUBIO_ORCID_TOKEN_URL: ${UBUNTUBIO_ORCID_TOKEN_URL:-https://sandbox.orcid.org/oauth/token}
+      UBUNTUBIO_ORCID_AUTHORIZE_URL: ${UBUNTUBIO_ORCID_AUTHORIZE_URL:-https://sandbox.orcid.org/oauth/authorize}
     volumes:
       - ${UBUNTUBIO_DATA_DIR:-./.data}:/srv/data
     ports:
