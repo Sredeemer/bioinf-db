@@ -132,6 +132,7 @@ async def delete_token(
 async def orcid_authorize(
     request: Request,
     redirect_uri: str | None = None,
+    state: str | None = None,
 ) -> RedirectResponse:
     """Redirect user agent to ORCID OAuth2 login dialog."""
     callback = (
@@ -146,6 +147,8 @@ async def orcid_authorize(
         "scope=/authenticate&"
         f"redirect_uri={callback}"
     )
+    if state:
+        auth_url += f"&state={state}"
     return RedirectResponse(url=auth_url, status_code=status.HTTP_302_FOUND)
 
 
@@ -153,6 +156,7 @@ async def orcid_authorize(
 async def orcid_callback(
     code: str,
     request: Request,
+    state: str | None = None,
     redirect_uri: str | None = None,
     session: AsyncSession = Depends(get_db_session),
 ) -> Any:
@@ -219,9 +223,15 @@ async def orcid_callback(
         extra={"orcid_id": orcid_id, "user_id": user.id},
     )
 
-    # If caller is browser accepting HTML, redirect to Next.js frontend with token
+    # Check if login was initiated by CLI loopback
+    if state and state.startswith("cli_port_"):
+        port_num = state.split("_")[-1]
+        loopback_url = f"http://127.0.0.1:{port_num}/callback?token={raw_token}"
+        return RedirectResponse(url=loopback_url, status_code=status.HTTP_302_FOUND)
+
+    # If caller is browser accepting HTML or state is set, redirect to web callback
     accept_header = request.headers.get("accept", "")
-    if "text/html" in accept_header:
+    if "text/html" in accept_header or state:
         redirect_url = f"{settings.WEB_URL}/auth/callback?token={raw_token}"
         return RedirectResponse(url=redirect_url, status_code=status.HTTP_302_FOUND)
 

@@ -76,3 +76,25 @@ async def test_orcid_callback_success(test_client: AsyncClient) -> None:
         assert "raw_token" in data
         assert data["raw_token"].startswith("ubp_")
         assert data["scope"] == "write"
+
+
+@pytest.mark.asyncio
+async def test_orcid_callback_cli_loopback_redirect(test_client: AsyncClient) -> None:
+    """Test /api/auth/orcid/callback with state=cli_port_<PORT> redirects to 127.0.0.1:<PORT>."""
+    mock_orcid_payload = {
+        "access_token": "mock_orcid_access_token_cli",
+        "token_type": "bearer",
+        "orcid": "0000-0002-1234-5678",
+        "name": "Dr. Amina Diallo",
+    }
+    mock_post = AsyncMock()
+    mock_post.return_value = Response(200, json=mock_orcid_payload)
+
+    with patch("httpx.AsyncClient.post", new=mock_post):
+        resp = await test_client.get(
+            "/api/auth/orcid/callback?code=mock_cli_code&state=cli_port_54321",
+            follow_redirects=False,
+        )
+        assert resp.status_code == 302
+        location = resp.headers["location"]
+        assert location.startswith("http://127.0.0.1:54321/callback?token=ubp_")
