@@ -107,6 +107,75 @@ async def migrate_users_table(conn: Any) -> None:
         logger.info("Backfilled username for user", extra={"user_id": uid, "username": chosen})
 
 
+async def backfill_search_index(conn: Any) -> None:
+    """Ensure all existing repositories are indexed into FTS5 on startup."""
+    repos_res = await conn.execute(
+        text("""
+            SELECT r.id, r.slug, r.name, r.description, r.domain, r.access, r.license,
+                   r.is_verified_african, r.owner_type, r.owner_id, r.created_at, r.updated_at
+            FROM repositories r
+            LEFT JOIN dataset_search_records s ON r.id = s.repo_id
+            WHERE s.repo_id IS NULL
+        """)
+    )
+    for row in repos_res.fetchall():
+        repo_id, slug, name, description = row[0], row[1], row[2], row[3]
+        domain, access, lic, is_verified = row[4], row[5], row[6], bool(row[7])
+        owner_type, owner_id = row[8], row[9]
+        created_at, updated_at = row[10], row[11]
+
+        await conn.execute(
+            text("""
+                INSERT OR REPLACE INTO dataset_search_records(
+                    repo_id, slug, name, title, description, domain, access, license,
+                    countries_json, taxa_json, genus_json, family_json,
+                    is_verified_african, owner_type, owner_id, samples_count,
+                    benefit_sharing, created_at, updated_at
+                ) VALUES (
+                    :repo_id, :slug, :name, :title, :description, :domain, :access, :license,
+                    '[]', '[]', '[]', '[]',
+                    :is_verified_african, :owner_type, :owner_id, 0,
+                    NULL, :created_at, :updated_at
+                )
+            """),
+            {
+                "repo_id": repo_id,
+                "slug": slug,
+                "name": name,
+                "title": name,
+                "description": description or "",
+                "domain": domain,
+                "access": access,
+                "license": lic,
+                "is_verified_african": is_verified,
+                "owner_type": owner_type,
+                "owner_id": owner_id,
+                "created_at": created_at,
+                "updated_at": updated_at,
+            },
+        )
+        await conn.execute(
+            text("DELETE FROM datasets_fts WHERE repo_id = :repo_id"),
+            {"repo_id": repo_id},
+        )
+        await conn.execute(
+            text("""
+                INSERT INTO datasets_fts(
+                    repo_id, slug, title, description, countries, genus, family, benefit_sharing
+                ) VALUES (
+                    :repo_id, :slug, :title, :description, '', '', '', ''
+                )
+            """),
+            {
+                "repo_id": repo_id,
+                "slug": slug,
+                "title": name,
+                "description": description or "",
+            },
+        )
+        logger.info("Backfilled search index for repository", extra={"slug": slug})
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan context manager for schema initialization and cleanup."""
@@ -119,6 +188,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await conn.run_sync(Base.metadata.create_all)
         await migrate_users_table(conn)
         await init_fts_tables(conn)
+        await backfill_search_index(conn)
     logger.info("Database schemas and FTS5 search tables initialized successfully")
     yield
     logger.info("Shutting down UbuntuBio Hub API server")

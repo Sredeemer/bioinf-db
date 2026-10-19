@@ -23,6 +23,7 @@ from ubuntubio.core.logging import get_logger
 from ubuntubio.db.models import OrganizationModel, RepositoryModel, UserModel
 from ubuntubio.db.session import get_db_session
 from ubuntubio.git.repo_manager import GitRepoManager
+from ubuntubio.indexer.fts import search_service
 
 router = APIRouter(prefix="/api/repos", tags=["Repositories"])
 logger = get_logger("ubuntubio.api.repos")
@@ -105,6 +106,37 @@ async def create_repository(
 
     # Initialize bare git repository on disk under single data folder
     git_manager.init_bare_repo(payload.owner_slug, payload.name)
+
+    # Auto-index into SQLite FTS5 search engine for instant discovery
+    try:
+        await search_service.index_dataset(
+            session=session,
+            repo_id=repo.id,
+            slug=repo.slug,
+            name=repo.name,
+            title=repo.name,
+            description=repo.description,
+            domain=repo.domain,
+            access=repo.access,
+            license=repo.license,
+            countries=[],
+            taxa=[],
+            genera=[],
+            families=[],
+            is_verified_african=repo.is_verified_african,
+            owner_type=repo.owner_type,
+            owner_id=repo.owner_id,
+            samples_count=0,
+            benefit_sharing=None,
+            created_at=repo.created_at,
+            updated_at=repo.updated_at,
+        )
+        await session.commit()
+    except Exception as exc:
+        logger.warning(
+            "Auto-indexing dataset in search failed",
+            extra={"repo_slug": repo.slug, "error": str(exc)},
+        )
 
     logger.info(
         "Created repository",
