@@ -314,7 +314,7 @@ async def request_device_code(
         else "https://ubuntu-bio-web.vercel.app"
     )
     verification_uri = f"{base_web}/device"
-    verification_uri_complete = f"{base_web}/device?user_code={user_code}"
+    verification_uri_complete = f"{base_web}/device?user_code={user_code}&auto=1"
 
     logger.info("Created device authorization request", extra={"user_code": user_code})
 
