@@ -133,6 +133,38 @@ class TokenCreatedResponse(BaseModel):
 
 
 # -------------------------------------------------------------------------
+# Device Authorization (RFC 8628)
+# -------------------------------------------------------------------------
+
+
+class DeviceCodeResponse(BaseModel):
+    """Response when a device flow is initiated."""
+
+    device_code: str
+    user_code: str
+    verification_uri: str
+    verification_uri_complete: str
+    expires_in: int
+    interval: int = 2
+
+
+class DeviceVerifyRequest(BaseModel):
+    """User code verification payload submitted by authenticated browser."""
+
+    model_config = ConfigDict(strict=True)
+
+    user_code: str = Field(..., min_length=4, max_length=16)
+
+
+class DeviceTokenRequest(BaseModel):
+    """Polling payload sent by CLI client."""
+
+    model_config = ConfigDict(strict=True)
+
+    device_code: str = Field(..., min_length=16, max_length=128)
+
+
+# -------------------------------------------------------------------------
 # OpenXet CAS & Commits
 # -------------------------------------------------------------------------
 

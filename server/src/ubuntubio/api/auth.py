@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import secrets
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -12,12 +14,28 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ubuntubio.api.dependencies import require_authenticated_user
-from ubuntubio.api.schemas import CreateTokenRequest, TokenCreatedResponse
+from ubuntubio.api.schemas import (
+    CreateTokenRequest,
+    DeviceCodeResponse,
+    DeviceTokenRequest,
+    DeviceVerifyRequest,
+    TokenCreatedResponse,
+)
 from ubuntubio.auth.pat import create_personal_access_token, revoke_token
 from ubuntubio.config import settings
 from ubuntubio.core.logging import get_logger
-from ubuntubio.db.models import PersonalAccessTokenModel, UserModel
+from ubuntubio.db.models import DeviceAuthorizationModel, PersonalAccessTokenModel, UserModel
 from ubuntubio.db.session import get_db_session
+
+USER_CODE_CHARSET = "BCDFGHJKLMNPQRSTVWXYZ23456789"
+
+
+def generate_user_code() -> str:
+    """Generate a clean, unambiguous user code in UBIO-XXXX-XX format."""
+    part1 = "".join(secrets.choice(USER_CODE_CHARSET) for _ in range(4))
+    part2 = "".join(secrets.choice(USER_CODE_CHARSET) for _ in range(2))
+    return f"UBIO-{part1}-{part2}"
+
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 logger = get_logger("ubuntubio.api.auth")
@@ -263,4 +281,169 @@ async def dev_login(
         raw_token=raw_token,
         expires_at=token_record.expires_at,
         created_at=token_record.created_at,
+    )
+
+
+# -------------------------------------------------------------------------
+# Device Authorization Grant (RFC 8628)
+# -------------------------------------------------------------------------
+
+
+@router.post("/device/code", response_model=DeviceCodeResponse)
+async def request_device_code(
+    session: AsyncSession = Depends(get_db_session),
+) -> DeviceCodeResponse:
+    """Initiate an OAuth 2.0 Device Authorization Grant flow (RFC 8628)."""
+    device_code = secrets.token_urlsafe(32)
+    user_code = generate_user_code()
+    expires_in_seconds = 600  # 10 minutes
+    expires_at = datetime.now(UTC) + timedelta(seconds=expires_in_seconds)
+
+    record = DeviceAuthorizationModel(
+        device_code=device_code,
+        user_code=user_code,
+        status="pending",
+        expires_at=expires_at,
+    )
+    session.add(record)
+    await session.commit()
+
+    base_web = (
+        settings.WEB_URL.rstrip("/")
+        if settings.ENV == "development"
+        else "https://ubuntu-bio-web.vercel.app"
+    )
+    verification_uri = f"{base_web}/device"
+    verification_uri_complete = f"{base_web}/device?user_code={user_code}"
+
+    logger.info("Created device authorization request", extra={"user_code": user_code})
+
+    return DeviceCodeResponse(
+        device_code=device_code,
+        user_code=user_code,
+        verification_uri=verification_uri,
+        verification_uri_complete=verification_uri_complete,
+        expires_in=expires_in_seconds,
+        interval=2,
+    )
+
+
+@router.post("/device/verify")
+async def verify_device_code(
+    payload: DeviceVerifyRequest,
+    current_user: UserModel = Depends(require_authenticated_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> dict[str, Any]:
+    """Verify and approve a pending device code from the browser."""
+    clean_code = payload.user_code.strip().upper()
+    if not clean_code.startswith("UBIO-"):
+        parts = clean_code.replace("-", "")
+        if len(parts) == 6:
+            clean_code = f"UBIO-{parts[:4]}-{parts[4:]}"
+
+    stmt = select(DeviceAuthorizationModel).where(DeviceAuthorizationModel.user_code == clean_code)
+    res = await session.execute(stmt)
+    record = res.scalar_one_or_none()
+
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invalid or unrecognized device code.",
+        )
+
+    now = datetime.now(UTC)
+    rec_expires = (
+        record.expires_at if record.expires_at.tzinfo else record.expires_at.replace(tzinfo=UTC)
+    )
+
+    if now > rec_expires or record.status == "expired":
+        record.status = "expired"
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This device code has expired. Please run 'ubio login' again.",
+        )
+
+    if record.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This device code has already been processed.",
+        )
+
+    # Mint a Personal Access Token for the device
+    raw_token, _ = await create_personal_access_token(
+        session=session,
+        user_id=current_user.id,
+        name=f"CLI Terminal Session ({clean_code})",
+        scope="write",
+        expires_in_days=90,
+    )
+
+    record.status = "approved"
+    record.user_id = current_user.id
+    record.access_token = raw_token
+    await session.commit()
+
+    logger.info(
+        "Approved device authorization request",
+        extra={"user_code": clean_code, "user_id": current_user.id},
+    )
+
+    return {
+        "success": True,
+        "message": "Device successfully authorized! You can return to your terminal.",
+    }
+
+
+@router.post("/device/token")
+async def exchange_device_token(
+    payload: DeviceTokenRequest,
+    session: AsyncSession = Depends(get_db_session),
+) -> dict[str, Any]:
+    """Poll for approval and exchange approved device_code for access_token (RFC 8628)."""
+    stmt = select(DeviceAuthorizationModel).where(
+        DeviceAuthorizationModel.device_code == payload.device_code.strip()
+    )
+    res = await session.execute(stmt)
+    record = res.scalar_one_or_none()
+
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid_grant",
+        )
+
+    now = datetime.now(UTC)
+    rec_expires = (
+        record.expires_at if record.expires_at.tzinfo else record.expires_at.replace(tzinfo=UTC)
+    )
+
+    if now > rec_expires or record.status == "expired":
+        record.status = "expired"
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="expired_token",
+        )
+
+    if record.status == "pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="authorization_pending",
+        )
+
+    if record.status == "approved" and record.access_token:
+        token = record.access_token
+        # Delete the device authorization record upon exchange (single-use invariant)
+        await session.delete(record)
+        await session.commit()
+
+        return {
+            "access_token": token,
+            "token_type": "Bearer",
+        }
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="access_denied",
     )

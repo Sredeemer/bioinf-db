@@ -124,6 +124,26 @@ class PersonalAccessTokenModel(Base):
     organization: Mapped[OrganizationModel | None] = relationship(back_populates="tokens")
 
 
+class DeviceAuthorizationModel(Base):
+    """OAuth 2.0 Device Authorization Grant session (RFC 8628)."""
+
+    __tablename__ = "device_authorizations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    device_code: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    user_code: Mapped[str] = mapped_column(String(16), unique=True, index=True, nullable=False)
+    # status: pending, approved, denied, expired
+    status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False)
+    user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=True
+    )
+    access_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    user: Mapped[UserModel | None] = relationship()
+
+
 class RepositoryModel(Base):
     """Bioinformatics dataset repository."""
 
