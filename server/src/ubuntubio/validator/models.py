@@ -15,11 +15,143 @@ from ubuntubio.validator.constants import (
     AU_COUNTRY_CODES,
     PROHIBITED_TAXA,
     VALID_DOMAINS,
+    VALID_FILE_TYPES,
+    VALID_PLATFORMS,
+    VALID_SELECTIONS,
+    VALID_SOURCES,
+    VALID_STRATEGIES,
 )
 
 # ISO-8601 Date regex: YYYY, YYYY-MM, or YYYY-MM-DD
 DATE_REGEX = re.compile(r"^\d{4}(-(0[1-9]|1[0-2])(-(0[1-9]|[12]\d|3[01]))?)?$")
 MD5_REGEX = re.compile(r"^[a-fA-F0-9]{32}$")
+
+
+class SequencingLibraryRecord(BaseModel):
+    """Record describing an individual sequenced library and its data files."""
+
+    model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
+
+    library_id: str = Field(..., min_length=1, max_length=64)
+    sample_name: str = Field(..., min_length=1, max_length=128)
+    title: str = Field(..., min_length=5, max_length=200)
+    file_type: str
+    filenames: list[str] = Field(..., min_length=1)
+
+    @field_validator("file_type")
+    @classmethod
+    def validate_file_type(cls, v: str) -> str:
+        clean = v.strip().upper()
+        if clean not in VALID_FILE_TYPES:
+            raise ValueError(
+                f"Invalid file_type '{v}'. Permitted types: {sorted(VALID_FILE_TYPES)}"
+            )
+        return clean
+
+    @field_validator("filenames")
+    @classmethod
+    def validate_filenames(cls, v: list[str]) -> list[str]:
+        if not v:
+            raise ValueError("Library must specify at least one filename.")
+        cleaned: list[str] = []
+        for fn in v:
+            fn_clean = fn.strip()
+            if not fn_clean:
+                raise ValueError("Filename cannot be empty.")
+            if fn_clean.startswith("/") or ".." in fn_clean.split("/"):
+                raise ValueError(
+                    f"Path traversal or absolute paths not permitted in filename: '{fn}'"
+                )
+            cleaned.append(fn_clean)
+        if len(cleaned) != len(set(cleaned)):
+            raise ValueError(f"Duplicate filenames found in library: {cleaned}")
+        return cleaned
+
+
+class SequencingExperiment(BaseModel):
+    """Sequencing experiment and platform metadata in README.md."""
+
+    model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
+
+    platform: str
+    instrument_model: str = Field(..., min_length=1, max_length=120)
+    library_strategy: str
+    library_source: str
+    library_selection: str
+    library_layout: Literal["paired", "single"]
+    nominal_length: int | None = None
+    demultiplexed: bool = True
+    design_description: str | None = None
+    libraries: list[SequencingLibraryRecord] = Field(default_factory=list)
+
+    @field_validator("platform")
+    @classmethod
+    def validate_platform(cls, v: str) -> str:
+        clean = v.strip().upper()
+        if clean not in VALID_PLATFORMS:
+            raise ValueError(
+                f"Invalid platform '{v}'. Permitted platforms: {sorted(VALID_PLATFORMS)}"
+            )
+        return clean
+
+    @field_validator("library_strategy")
+    @classmethod
+    def validate_strategy(cls, v: str) -> str:
+        clean = v.strip().upper()
+        if clean not in VALID_STRATEGIES:
+            raise ValueError(
+                f"Invalid library_strategy '{v}'. Permitted strategies: {sorted(VALID_STRATEGIES)}"
+            )
+        return clean
+
+    @field_validator("library_source")
+    @classmethod
+    def validate_source(cls, v: str) -> str:
+        clean = v.strip().upper()
+        if clean not in VALID_SOURCES:
+            raise ValueError(
+                f"Invalid library_source '{v}'. Permitted sources: {sorted(VALID_SOURCES)}"
+            )
+        return clean
+
+    @field_validator("library_selection")
+    @classmethod
+    def validate_selection(cls, v: str) -> str:
+        clean = v.strip().upper()
+        if clean not in VALID_SELECTIONS:
+            raise ValueError(
+                f"Invalid library_selection '{v}'. Permitted selections: {sorted(VALID_SELECTIONS)}"
+            )
+        return clean
+
+    @model_validator(mode="after")
+    def validate_layout_and_libraries(self) -> SequencingExperiment:
+        if self.library_layout == "paired":
+            if self.nominal_length is None or self.nominal_length <= 0:
+                raise ValueError(
+                    "nominal_length must be a positive integer when library_layout is 'paired'."
+                )
+            for lib in self.libraries:
+                if len(lib.filenames) != 2:
+                    raise ValueError(
+                        f"Library '{lib.library_id}' has layout 'paired' but specifies "
+                        f"{len(lib.filenames)} filenames. Exactly 2 filenames are required "
+                        f"for paired-end sequencing."
+                    )
+        elif self.library_layout == "single":
+            for lib in self.libraries:
+                if len(lib.filenames) != 1:
+                    raise ValueError(
+                        f"Library '{lib.library_id}' has layout 'single' but specifies "
+                        f"{len(lib.filenames)} filenames. Exactly 1 filename is required "
+                        f"for single-end sequencing."
+                    )
+
+        lib_ids = [lib.library_id for lib in self.libraries]
+        if len(lib_ids) != len(set(lib_ids)):
+            raise ValueError(f"Duplicate library_id values found: {lib_ids}")
+
+        return self
 
 
 class DatasetCard(BaseModel):
@@ -36,6 +168,7 @@ class DatasetCard(BaseModel):
     data_types: list[str] = Field(default_factory=list)
     source: dict[str, Any] = Field(default_factory=dict)
     benefit_sharing: str | None = None
+    sequencing: SequencingExperiment | None = None
 
     @field_validator("domain")
     @classmethod
@@ -204,6 +337,7 @@ class ValidationResult(BaseModel):
     dataset_card: DatasetCard | None = None
     sample_count: int = 0
     remote_file_count: int = 0
+    library_count: int = 0
 
     @property
     def errors(self) -> list[ValidationIssue]:

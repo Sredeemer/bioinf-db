@@ -2,23 +2,65 @@
 
 from __future__ import annotations
 
+import logging
 import subprocess
 import sys
 
 from ubuntubio.validator.parser import validate_repository
 
+logger = logging.getLogger("ubuntubio.git.hook")
+
 
 def extract_git_blob(rev: str, file_path: str) -> str | None:
     """Read a specific file from Git object tree at a commit revision."""
-    res = subprocess.run(
-        ["git", "show", f"{rev}:{file_path}"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if res.returncode == 0:
-        return res.stdout
+    try:
+        res = subprocess.run(
+            ["git", "show", f"{rev}:{file_path}"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=15.0,
+        )
+        if res.returncode == 0:
+            return res.stdout
+    except subprocess.TimeoutExpired:
+        logger.error("git show timed out for %s:%s", rev, file_path)
+    except subprocess.SubprocessError as exc:
+        logger.error("git show failed for %s:%s: %s", rev, file_path, exc)
+    except Exception as exc:
+        logger.error(
+            "Unexpected error in extract_git_blob for %s:%s: %s", rev, file_path, exc, exc_info=True
+        )
     return None
+
+
+def extract_git_tree_files(rev: str) -> list[str]:
+    """List all file paths present in the Git tree at a commit revision."""
+    try:
+        res = subprocess.run(
+            ["git", "ls-tree", "-r", "--name-only", rev],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=15.0,
+        )
+        if res.returncode == 0:
+            return [line.strip() for line in res.stdout.splitlines() if line.strip()]
+        logger.warning(
+            "git ls-tree exited with code %d for rev %s: %s",
+            res.returncode,
+            rev,
+            res.stderr.strip(),
+        )
+    except subprocess.TimeoutExpired:
+        logger.error("git ls-tree timed out after 15 seconds for rev %s", rev)
+    except subprocess.SubprocessError as exc:
+        logger.error("git ls-tree failed for rev %s: %s", rev, exc)
+    except Exception as exc:
+        logger.error(
+            "Unexpected error in extract_git_tree_files for %s: %s", rev, exc, exc_info=True
+        )
+    return []
 
 
 def run_pre_receive_validation(stdin_lines: list[str]) -> int:
@@ -33,10 +75,11 @@ def run_pre_receive_validation(stdin_lines: list[str]) -> int:
         if new_rev.strip("0") == "":
             continue
 
-        # Extract metadata files from pushed commit
+        # Extract metadata files and full tree list from pushed commit
         readme_content = extract_git_blob(new_rev, "README.md")
         samples_content = extract_git_blob(new_rev, "samples.tsv")
         remote_files_content = extract_git_blob(new_rev, "remote_files.tsv")
+        discovered_files = extract_git_tree_files(new_rev)
 
         if readme_content is None and samples_content is None:
             # Not a metadata update or non-curated commit (e.g. initial empty commit)
@@ -46,6 +89,7 @@ def run_pre_receive_validation(stdin_lines: list[str]) -> int:
             readme_content=readme_content or "",
             samples_tsv_content=samples_content,
             remote_files_content=remote_files_content,
+            discovered_files=discovered_files,
         )
 
         if not result.is_valid:
@@ -57,14 +101,14 @@ def run_pre_receive_validation(stdin_lines: list[str]) -> int:
             for err in errors:
                 line_str = f" line {err.line}:" if err.line else ""
                 col_str = f" [{err.column}]" if err.column else ""
-                sys.stderr.write(f" ❌ {err.file}{line_str}{col_str} {err.message}\n")
+                sys.stderr.write(f" [ERROR] {err.file}{line_str}{col_str} {err.message}\n")
             sys.stderr.write("-------------------------------------------------------\n")
             sys.stderr.write(" Biological Constraints Reminder:\n")
             sys.stderr.write(" - Human genomic data (Taxon 9606) is strictly prohibited in v1.\n")
             sys.stderr.write(
                 " - Only 54 African Union ISO-3166-1 alpha-2 country codes are permitted.\n"
             )
-
+            sys.stderr.write(" - Declared sequencing libraries must match files and samples.\n")
             sys.stderr.write("=======================================================\n\n")
             return 1
 

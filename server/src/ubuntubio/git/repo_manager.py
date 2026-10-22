@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 from ubuntubio.config import settings
@@ -71,7 +72,7 @@ class GitRepoManager:
 
         pre_receive = hooks_dir / "pre-receive"
         with open(pre_receive, "w", encoding="utf-8") as f:
-            f.write("#!/bin/sh\nexec python3 -m ubuntubio.git.validator_hook\n")
+            f.write(f"#!/bin/sh\nexec {sys.executable} -m ubuntubio.git.validator_hook\n")
         pre_receive.chmod(0o755)
 
         post_receive = hooks_dir / "post-receive"

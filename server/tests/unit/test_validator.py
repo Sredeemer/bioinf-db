@@ -165,3 +165,181 @@ def test_t_val_10_sample_record_fuzzing_valid_inputs(
     )
     assert rec.country == country
     assert rec.taxon_id == taxon_id
+
+
+VALID_SEQUENCING_YAML = """---
+title: Mpox Clade IIb Genomic Surveillance
+domain: virus
+access: public
+license: cc-by-4.0
+countries: [NG]
+taxon_ids: [10244]
+sequencing:
+  platform: ILLUMINA
+  instrument_model: Illumina MiSeq
+  library_strategy: WGS
+  library_source: GENOMIC
+  library_selection: PCR
+  library_layout: paired
+  nominal_length: 300
+  demultiplexed: true
+  design_description: Paired-end sequencing of viral DNA
+  libraries:
+    - library_id: LIB_01
+      sample_name: SAMN001
+      title: WGS library for SAMN001
+      file_type: FASTQ
+      filenames:
+        - reads/SAMN001_1.fastq.gz
+        - reads/SAMN001_2.fastq.gz
+    - library_id: LIB_02
+      sample_name: SAMN002
+      title: WGS library for SAMN002
+      file_type: FASTQ
+      filenames:
+        - reads/SAMN002_1.fastq.gz
+        - reads/SAMN002_2.fastq.gz
+---
+# Mpox Surveillance
+"""
+
+
+def test_t_val_11_valid_sequencing_metadata_passes() -> None:
+    """T-VAL-11: Valid sequencing metadata with matching discovered files passes validation."""
+    discovered = [
+        "reads/SAMN001_1.fastq.gz",
+        "reads/SAMN001_2.fastq.gz",
+        "reads/SAMN002_1.fastq.gz",
+        "reads/SAMN002_2.fastq.gz",
+    ]
+    result = validate_repository(
+        readme_content=VALID_SEQUENCING_YAML,
+        samples_tsv_content=VALID_SAMPLES_TSV,
+        discovered_files=discovered,
+    )
+    assert result.is_valid is True
+    assert len(result.errors) == 0
+    assert result.library_count == 2
+    assert result.dataset_card is not None
+    assert result.dataset_card.sequencing is not None
+    assert result.dataset_card.sequencing.platform == "ILLUMINA"
+
+
+def test_t_val_12_paired_layout_missing_nominal_length_rejected() -> None:
+    """T-VAL-12: Paired layout without nominal_length is rejected."""
+    bad_yaml = VALID_SEQUENCING_YAML.replace("nominal_length: 300", "# no nominal length")
+    card, issues = parse_dataset_card(bad_yaml)
+    assert card is None
+    assert any("nominal_length must be a positive integer" in i.message for i in issues)
+
+
+def test_t_val_13_paired_layout_file_count_mismatch_rejected() -> None:
+    """T-VAL-13: Paired layout with only 1 file is rejected."""
+    bad_yaml = VALID_SEQUENCING_YAML.replace("- reads/SAMN001_2.fastq.gz", "")
+    card, issues = parse_dataset_card(bad_yaml)
+    assert card is None
+    assert any(
+        "Exactly 2 filenames are required for paired-end sequencing" in i.message for i in issues
+    )
+
+
+def test_t_val_14_library_sample_name_mismatch_rejected() -> None:
+    """T-VAL-14: Library referencing non-existent sample_id is rejected."""
+    bad_yaml = VALID_SEQUENCING_YAML.replace("sample_name: SAMN001", "sample_name: UNKNOWN_SAMPLE")
+    discovered = [
+        "reads/SAMN001_1.fastq.gz",
+        "reads/SAMN001_2.fastq.gz",
+        "reads/SAMN002_1.fastq.gz",
+        "reads/SAMN002_2.fastq.gz",
+    ]
+    result = validate_repository(
+        readme_content=bad_yaml,
+        samples_tsv_content=VALID_SAMPLES_TSV,
+        discovered_files=discovered,
+    )
+    assert result.is_valid is False
+    assert any(
+        "references sample_name 'UNKNOWN_SAMPLE', which does not exist" in i.message
+        for i in result.errors
+    )
+
+
+def test_t_val_15_missing_declared_file_rejected() -> None:
+    """T-VAL-15: Declared library file missing from discovered_files is rejected."""
+    # Omit SAMN002_2.fastq.gz from discovered
+    discovered = [
+        "reads/SAMN001_1.fastq.gz",
+        "reads/SAMN001_2.fastq.gz",
+        "reads/SAMN002_1.fastq.gz",
+    ]
+    result = validate_repository(
+        readme_content=VALID_SEQUENCING_YAML,
+        samples_tsv_content=VALID_SAMPLES_TSV,
+        discovered_files=discovered,
+    )
+    assert result.is_valid is False
+    assert any(
+        "Missing declared sequence file 'reads/SAMN002_2.fastq.gz'" in i.message
+        for i in result.errors
+    )
+
+
+def test_t_val_16_orphaned_sequence_file_rejected() -> None:
+    """T-VAL-16: Sequence file on disk not declared in metadata is rejected as an orphan."""
+    discovered = [
+        "reads/SAMN001_1.fastq.gz",
+        "reads/SAMN001_2.fastq.gz",
+        "reads/SAMN002_1.fastq.gz",
+        "reads/SAMN002_2.fastq.gz",
+        "reads/extra_untracked.fastq.gz",
+    ]
+    result = validate_repository(
+        readme_content=VALID_SEQUENCING_YAML,
+        samples_tsv_content=VALID_SAMPLES_TSV,
+        discovered_files=discovered,
+    )
+    assert result.is_valid is False
+    assert any(
+        "Orphaned sequence file 'reads/extra_untracked.fastq.gz'" in i.message
+        for i in result.errors
+    )
+
+
+def test_t_val_17_sequence_file_in_remote_files_satisfies_parity() -> None:
+    """T-VAL-17: Sequence file listed in remote_files.tsv satisfies parity without local file."""
+    remote_content = (
+        "filename\turl\tmd5\tsize_bytes\n"
+        "reads/SAMN001_1.fastq.gz\thttps://ftp.sra.ebi.ac.uk/SAMN001_1.fastq.gz\td41d8cd98f00b204e9800998ecf8427e\t1000\n"
+        "reads/SAMN001_2.fastq.gz\thttps://ftp.sra.ebi.ac.uk/SAMN001_2.fastq.gz\td41d8cd98f00b204e9800998ecf8427e\t1000\n"
+        "reads/SAMN002_1.fastq.gz\thttps://ftp.sra.ebi.ac.uk/SAMN002_1.fastq.gz\td41d8cd98f00b204e9800998ecf8427e\t1000\n"
+        "reads/SAMN002_2.fastq.gz\thttps://ftp.sra.ebi.ac.uk/SAMN002_2.fastq.gz\td41d8cd98f00b204e9800998ecf8427e\t1000\n"
+    )
+    result = validate_repository(
+        readme_content=VALID_SEQUENCING_YAML,
+        samples_tsv_content=VALID_SAMPLES_TSV,
+        remote_files_content=remote_content,
+        discovered_files=[],
+    )
+    assert result.is_valid is True
+    assert len(result.errors) == 0
+
+
+def test_t_val_18_legacy_repository_without_sequencing_block_passes() -> None:
+    """T-VAL-18: Legacy repository without sequencing: block passes validation cleanly."""
+    discovered = ["assemblies/consensus.fasta"]
+    result = validate_repository(
+        readme_content=VALID_CARD_YAML,
+        samples_tsv_content=VALID_SAMPLES_TSV,
+        discovered_files=discovered,
+    )
+    assert result.is_valid is True
+    assert len(result.errors) == 0
+    assert result.library_count == 0
+
+
+def test_t_val_19_path_traversal_in_library_filenames_rejected() -> None:
+    """T-VAL-19: Path traversal in filenames (e.g., ../../etc/passwd) is rejected."""
+    bad_yaml = VALID_SEQUENCING_YAML.replace("reads/SAMN001_1.fastq.gz", "../../etc/passwd")
+    card, issues = parse_dataset_card(bad_yaml)
+    assert card is None
+    assert any("Path traversal or absolute paths not permitted" in i.message for i in issues)
