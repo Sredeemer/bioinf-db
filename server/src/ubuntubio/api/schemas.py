@@ -54,6 +54,13 @@ class RepoResponse(BaseModel):
     is_verified_african: bool
     created_at: datetime
     updated_at: datetime
+    countries: list[str] = Field(default_factory=list)
+    taxon_ids: list[int] = Field(default_factory=list)
+    genus: list[str] = Field(default_factory=list)
+    family: list[str] = Field(default_factory=list)
+    samples_count: int = 0
+    total_size_bytes: int = 0
+    files_count: int = 0
 
 
 # -------------------------------------------------------------------------

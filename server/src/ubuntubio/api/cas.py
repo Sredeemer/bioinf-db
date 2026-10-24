@@ -1,7 +1,9 @@
-from __future__ import annotations
-
 import contextlib
+import os
+import shutil
+import subprocess
 from typing import Any
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -15,11 +17,13 @@ from ubuntubio.config import settings
 from ubuntubio.core.logging import get_logger
 from ubuntubio.db.models import LfsObjectModel, RepositoryModel, UserModel, XetFileModel
 from ubuntubio.db.session import get_db_session
+from ubuntubio.git.repo_manager import GitRepoManager
 from ubuntubio.indexer.worker import index_repository
 
 router = APIRouter(prefix="/api/repos/{owner}/{name}", tags=["CAS & Commits"])
 logger = get_logger("ubuntubio.api.cas")
 authz_service = AuthorizationService()
+git_manager = GitRepoManager()
 cas_token_manager = CasTokenManager(
     issuer=settings.API_URL,
     audience=settings.CAS_TOKEN_AUDIENCE,
@@ -87,8 +91,74 @@ async def commit_files(
         )
 
     registered_files: list[str] = []
+    readme_override: str | None = None
+    samples_tsv_override: str | None = None
+
+    repo_path = git_manager.get_repo_path(owner, repo.name)
+    if not repo_path.exists():
+        git_manager.init_bare_repo(owner, repo.name)
+
+    temp_index = settings.TMP_ROOT / f"git_idx_{repo.id}_{uuid.uuid4().hex}"
+    git_env = {**os.environ, "GIT_INDEX_FILE": str(temp_index)}
+
+    # Check if branch already exists
+    ref_check = subprocess.run(
+        ["git", "-C", str(repo_path), "rev-parse", "--verify", f"refs/heads/{payload.branch}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    parent_commit: str | None = None
+    if ref_check.returncode == 0:
+        parent_commit = ref_check.stdout.strip()
+        subprocess.run(
+            ["git", "-C", str(repo_path), "read-tree", parent_commit],
+            env=git_env,
+            capture_output=True,
+            check=False,
+        )
 
     for file_info in payload.files:
+        staged_tmp = settings.TMP_ROOT / f"{file_info.sha256}.tmp"
+        with contextlib.suppress(Exception):
+            target_cas = settings.DATA_ROOT / "xet" / f"{file_info.sha256}.bin"
+            target_cas.parent.mkdir(parents=True, exist_ok=True)
+            if staged_tmp.exists():
+                shutil.copy2(str(staged_tmp), str(target_cas))
+
+        if staged_tmp.exists():
+            if file_info.path == "README.md":
+                with contextlib.suppress(Exception):
+                    readme_override = staged_tmp.read_text(encoding="utf-8")
+            elif file_info.path == "samples.tsv":
+                with contextlib.suppress(Exception):
+                    samples_tsv_override = staged_tmp.read_text(encoding="utf-8")
+
+            hash_res = subprocess.run(
+                ["git", "-C", str(repo_path), "hash-object", "-w", str(staged_tmp)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if hash_res.returncode == 0:
+                blob_oid = hash_res.stdout.strip()
+                subprocess.run(
+                    [
+                        "git",
+                        "-C",
+                        str(repo_path),
+                        "update-index",
+                        "--add",
+                        "--cacheinfo",
+                        "100644",
+                        blob_oid,
+                        file_info.path,
+                    ],
+                    env=git_env,
+                    capture_output=True,
+                    check=False,
+                )
+
         # Upsert or register in xet_files
         xet_stmt = select(XetFileModel).where(XetFileModel.sha256 == file_info.sha256)
         xet_res = await session.execute(xet_stmt)
@@ -118,11 +188,53 @@ async def commit_files(
 
         registered_files.append(file_info.path)
 
+    # Finalize Git commit
+    try:
+        tree_res = subprocess.run(
+            ["git", "-C", str(repo_path), "write-tree"],
+            env=git_env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if tree_res.returncode == 0:
+            tree_oid = tree_res.stdout.strip()
+            commit_cmd = ["git", "-C", str(repo_path), "commit-tree", tree_oid]
+            if parent_commit:
+                commit_cmd.extend(["-p", parent_commit])
+            commit_cmd.extend(["-m", payload.message or "Commit files via UbuntuBio CAS"])
+            commit_res = subprocess.run(
+                commit_cmd,
+                env=git_env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if commit_res.returncode == 0:
+                commit_oid = commit_res.stdout.strip()
+                subprocess.run(
+                    ["git", "-C", str(repo_path), "update-ref", f"refs/heads/{payload.branch}", commit_oid],
+                    capture_output=True,
+                    check=False,
+                )
+    except Exception as exc:
+        logger.warning(f"Failed to record Git commit for {repo.slug}: {exc}")
+    finally:
+        if temp_index.exists():
+            with contextlib.suppress(Exception):
+                temp_index.unlink()
+
     await session.commit()
 
-    # Automatically index repository metadata and samples
+    # Automatically index repository metadata and samples with overrides
     with contextlib.suppress(Exception):
-        await index_repository(session=session, repo_slug=repo.slug)
+        await index_repository(
+            session=session,
+            repo_slug=repo.slug,
+            ref=payload.branch,
+            readme_override=readme_override,
+            samples_tsv_override=samples_tsv_override,
+        )
 
     logger.info(
         "Committed files to repository",

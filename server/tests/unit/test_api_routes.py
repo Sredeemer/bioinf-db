@@ -22,8 +22,10 @@ async def test_client(tmp_path: Path) -> AsyncClient:  # type: ignore[misc]
     # Override settings for test
     settings.GIT_ROOT = tmp_path / "git"
     settings.TMP_ROOT = tmp_path / "tmp"
+    settings.DATA_ROOT = tmp_path / "data"
     settings.GIT_ROOT.mkdir(parents=True, exist_ok=True)
     settings.TMP_ROOT.mkdir(parents=True, exist_ok=True)
+    settings.DATA_ROOT.mkdir(parents=True, exist_ok=True)
 
     engine = create_async_engine(TEST_DB_URL, echo=False)
     async with engine.begin() as conn:

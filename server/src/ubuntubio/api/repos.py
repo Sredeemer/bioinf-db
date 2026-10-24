@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
+import json
 import subprocess
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ubuntubio.api.dependencies import get_optional_user, require_authenticated_user
@@ -20,7 +22,13 @@ from ubuntubio.api.schemas import (
 )
 from ubuntubio.auth.authz import AuthorizationService, RepoAction
 from ubuntubio.core.logging import get_logger
-from ubuntubio.db.models import OrganizationModel, RepositoryModel, UserModel
+from ubuntubio.db.models import (
+    DatasetSearchRecordModel,
+    LfsObjectModel,
+    OrganizationModel,
+    RepositoryModel,
+    UserModel,
+)
 from ubuntubio.db.session import get_db_session
 from ubuntubio.git.repo_manager import GitRepoManager
 from ubuntubio.indexer.fts import search_service
@@ -177,7 +185,54 @@ async def get_repository(
             detail=f"Repository '{slug}' not found.",
         )
 
-    return RepoResponse.model_validate(repo)
+    countries: list[str] = []
+    taxon_ids: list[int] = []
+    genus: list[str] = []
+    family: list[str] = []
+    samples_count = 0
+
+    search_stmt = select(DatasetSearchRecordModel).where(DatasetSearchRecordModel.repo_id == repo.id)
+    search_res = await session.execute(search_stmt)
+    search_rec = search_res.scalar_one_or_none()
+    if search_rec:
+        with contextlib.suppress(Exception):
+            countries = json.loads(search_rec.countries_json)
+        with contextlib.suppress(Exception):
+            taxon_ids = json.loads(search_rec.taxa_json)
+        with contextlib.suppress(Exception):
+            genus = json.loads(search_rec.genus_json)
+        with contextlib.suppress(Exception):
+            family = json.loads(search_rec.family_json)
+        samples_count = search_rec.samples_count
+
+    lfs_stmt = select(
+        func.count(LfsObjectModel.id),
+        func.coalesce(func.sum(LfsObjectModel.size_bytes), 0),
+    ).where(LfsObjectModel.repo_id == repo.id)
+    lfs_res = await session.execute(lfs_stmt)
+    f_count, t_bytes = lfs_res.one()
+
+    return RepoResponse(
+        id=repo.id,
+        slug=repo.slug,
+        name=repo.name,
+        owner_type=repo.owner_type,
+        owner_id=repo.owner_id,
+        description=repo.description,
+        domain=repo.domain,
+        access=repo.access,
+        license=repo.license,
+        is_verified_african=repo.is_verified_african,
+        created_at=repo.created_at,
+        updated_at=repo.updated_at,
+        countries=countries,
+        taxon_ids=taxon_ids,
+        genus=genus,
+        family=family,
+        samples_count=samples_count,
+        total_size_bytes=t_bytes or 0,
+        files_count=f_count or 0,
+    )
 
 
 @router.patch("/{owner}/{name}", response_model=RepoResponse)
