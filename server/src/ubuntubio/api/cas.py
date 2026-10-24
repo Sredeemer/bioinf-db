@@ -99,7 +99,16 @@ async def commit_files(
         git_manager.init_bare_repo(owner, repo.name)
 
     temp_index = settings.TMP_ROOT / f"git_idx_{repo.id}_{uuid.uuid4().hex}"
-    git_env = {**os.environ, "GIT_INDEX_FILE": str(temp_index)}
+    author_name = user.name or user.username or "UbuntuBio CAS"
+    author_email = user.email or "cas@ubuntubio.org"
+    git_env = {
+        **os.environ,
+        "GIT_INDEX_FILE": str(temp_index),
+        "GIT_AUTHOR_NAME": author_name,
+        "GIT_AUTHOR_EMAIL": author_email,
+        "GIT_COMMITTER_NAME": "UbuntuBio Hub",
+        "GIT_COMMITTER_EMAIL": "hub@ubuntubio.org",
+    }
 
     # Check if branch already exists
     ref_check = subprocess.run(
@@ -214,6 +223,11 @@ async def commit_files(
                 commit_oid = commit_res.stdout.strip()
                 subprocess.run(
                     ["git", "-C", str(repo_path), "update-ref", f"refs/heads/{payload.branch}", commit_oid],
+                    capture_output=True,
+                    check=False,
+                )
+                subprocess.run(
+                    ["git", "-C", str(repo_path), "symbolic-ref", "HEAD", f"refs/heads/{payload.branch}"],
                     capture_output=True,
                     check=False,
                 )

@@ -1,5 +1,6 @@
 """Background and synchronous indexer worker for repository metadata and samples."""
 
+import contextlib
 import csv
 import io
 import json
@@ -7,11 +8,11 @@ import subprocess
 from typing import Any
 
 import yaml
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ubuntubio.core.logging import get_logger
-from ubuntubio.db.models import RepositoryModel, SampleModel, generate_uuid
+from ubuntubio.db.models import DatasetSearchRecordModel, RepositoryModel, SampleModel, generate_uuid
 from ubuntubio.git.repo_manager import GitRepoManager
 from ubuntubio.indexer.fts import search_service
 from ubuntubio.indexer.meili import DATASETS_INDEX, SAMPLES_INDEX, MeiliService, meili_service
@@ -237,15 +238,48 @@ async def index_repository(
             )
 
     # 4. Atomic Database Update (T-SRCH-01, T-SRCH-02)
-    # Remove existing samples for this repo to prevent duplicate rows on re-push / new commits
-    await session.execute(delete(SampleModel).where(SampleModel.repo_id == repo.id))
-    for sm in sample_models:
-        session.add(sm)
-    await session.commit()
-    await session.refresh(repo)
+    total_samples_count = len(sample_models)
+    if tsv_content is not None:
+        # Only rewrite sample rows if samples.tsv was provided or extracted
+        await session.execute(delete(SampleModel).where(SampleModel.repo_id == repo.id))
+        for sm in sample_models:
+            session.add(sm)
+        await session.commit()
+        await session.refresh(repo)
+    else:
+        # Retain existing samples count
+        existing_count = (
+            await session.execute(
+                select(func.count(SampleModel.id)).where(SampleModel.repo_id == repo.id)
+            )
+        ).scalar() or 0
+        total_samples_count = existing_count
 
     title = str(card_data.get("title") or repo.name)
     benefit_sharing = card_data.get("benefit_sharing")
+
+    # If countries/taxa were not in current commit card, merge existing search record
+    if not unique_countries or not unique_taxa:
+        existing_rec = (
+            await session.execute(
+                select(DatasetSearchRecordModel).where(DatasetSearchRecordModel.repo_id == repo.id)
+            )
+        ).scalar_one_or_none()
+        if existing_rec:
+            if not unique_countries and existing_rec.countries_json:
+                with contextlib.suppress(Exception):
+                    unique_countries.update(json.loads(existing_rec.countries_json))
+            if not unique_taxa and existing_rec.taxa_json:
+                with contextlib.suppress(Exception):
+                    unique_taxa.update(json.loads(existing_rec.taxa_json))
+            if not unique_genera and existing_rec.genus_json:
+                with contextlib.suppress(Exception):
+                    unique_genera.update(json.loads(existing_rec.genus_json))
+            if not unique_families and existing_rec.family_json:
+                with contextlib.suppress(Exception):
+                    unique_families.update(json.loads(existing_rec.family_json))
+            if total_samples_count == 0 and existing_rec.samples_count > 0:
+                total_samples_count = existing_rec.samples_count
 
     # 5. Native SQLite FTS5 Indexing (Atomic)
     await search_service.index_dataset(
@@ -265,14 +299,14 @@ async def index_repository(
         is_verified_african=repo.is_verified_african,
         owner_type=repo.owner_type,
         owner_id=repo.owner_id,
-        samples_count=len(sample_models),
+        samples_count=total_samples_count,
         benefit_sharing=benefit_sharing,
         created_at=repo.created_at,
         updated_at=repo.updated_at,
     )
     if sample_docs:
         await search_service.index_samples(session, repo.id, sample_docs)
-    else:
+    elif tsv_content is not None:
         await search_service.delete_repo_samples(session, repo.id)
 
     # 6. Legacy / mock Meilisearch sync if present

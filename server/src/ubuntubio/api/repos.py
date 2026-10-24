@@ -448,9 +448,9 @@ async def get_tree_listing(
     if not repo_path.exists():
         return TreeResponse(ref=ref, items=[])
 
-    # Run git ls-tree -l
+    # Run git ls-tree -r -l
     result = subprocess.run(
-        ["git", "-C", str(repo_path), "ls-tree", "-l", ref],
+        ["git", "-C", str(repo_path), "ls-tree", "-r", "-l", ref],
         capture_output=True,
         text=True,
         check=False,
