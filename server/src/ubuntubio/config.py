@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     DATA_ROOT: Path = Path("/srv/ubuntubio/data")
     GIT_ROOT: Path = Path("/srv/ubuntubio/data/git")
     TMP_ROOT: Path = Path("/srv/ubuntubio/data/tmp")
+    TAXONOMY_DUMP_DIR: Path = Field(
+        default=Path("/srv/ubuntubio/data/taxonomy"),
+        validation_alias=AliasChoices("UBUNTUBIO_TAXONOMY_DUMP_DIR", "TAXONOMY_DUMP_DIR"),
+    )
 
     # Embedded Database & Search (Single File: ubuntubio.db)
     DATABASE_URL: str = Field(

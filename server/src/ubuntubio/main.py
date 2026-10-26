@@ -10,7 +10,7 @@ from sqlalchemy import text
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from ubuntubio import __version__
-from ubuntubio.api import auth, cas, gated, git, lfs, orgs, repos, search
+from ubuntubio.api import auth, cas, gated, git, lfs, orgs, repos, search, taxonomy
 from ubuntubio.auth.cas_tokens import CasTokenManager
 from ubuntubio.auth.username import extract_orcid_suffix, slugify_researcher_name
 from ubuntubio.config import settings
@@ -230,6 +230,8 @@ app.include_router(git.router)
 app.include_router(lfs.router)
 app.include_router(search.router)
 app.include_router(search.admin_router)
+app.include_router(taxonomy.router)
+app.include_router(taxonomy.v1_router)
 
 
 @app.get("/healthz", tags=["Ops"])
