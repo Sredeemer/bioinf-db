@@ -96,7 +96,7 @@ The file must be tab-delimited (`\t`), UTF-8 encoded, and contain the following 
 
 Integrity verification is enforced across three distinct hashing mechanisms:
 
-1. **SHA-256**: Calculated for Git LFS pointers and local client verification (`afrihub download`).
+1. **SHA-256**: Calculated for Git LFS pointers and local client verification (`ubio download`).
 2. **Blake3**: Calculated across content-defined chunks (Gearhash 64 KiB CDC) in the OpenXet CAS layer for global deduplication.
 3. **MD5**: Stored in `remote_files.tsv` for linked raw sequencing reads hosted on external FTP/HTTP mirrors (e.g., ENA FASTQ runs):
    ```tsv
@@ -106,7 +106,25 @@ Integrity verification is enforced across three distinct hashing mechanisms:
 
 ---
 
-## 6. African Data Sovereignty & Nagoya Protocol Alignment
+## 6. Data Ingestion Pathways & Sizing Tiers
+
+To accommodate varying institutional compute infrastructure and internet connectivity across African research centers, the hub enforces a dual-path ingestion architecture:
+
+### Web Browser Ingestion (Cohorts &le; 500 MB)
+- **Compulsory File Upload**: In web submission mode, researchers must select/drop at least one sequence read file (`.fastq.gz`, `.fasta.gz`, `.bam`, `.cram`).
+- **Zero-Network Client-Side Preflight**: Uses Web Streams to decompress the first 64 KB locally, verifying record integrity, Phred quality scores, and enforcing zero human contamination (rejection of NCBI Taxon ID 9606).
+- **Progress Tracking**: Real-time multi-stage streaming progress indicator showing CAS chunking, hashing, and Git tree registration.
+- **Size Limit**: Hard-capped at 500 MB to prevent browser memory exhaustion, connection timeouts, and upload aborts over high-latency networks.
+
+### Command-Line Ingestion (`ubio push`) (Cohorts &gt; 500 MB)
+- **High-Throughput & HPC Support**: Mandatory for large whole-genome sequencing (WGS), metagenomic cohorts, and automated sequencing facility drops.
+- **OpenXet Content-Addressed Storage (CAS)**: Uses Gearhash content-defined chunking (64 KiB CDC) and Blake3 deduplication to minimize network payload.
+- **Resumable Transfers**: Uninterrupted recovery from intermittent connection failures.
+- **HPC Cluster Declaration**: The web wizard allows researchers to pre-register metadata manifests for remote files and generates the exact `ubio push` command to execute directly on institutional compute clusters.
+
+---
+
+## 7. African Data Sovereignty & Nagoya Protocol Alignment
 
 To counteract historical "helicopter research" and respect the **Nagoya Protocol on Access to Genetic Resources and Benefit-Sharing**:
 
@@ -119,7 +137,7 @@ To counteract historical "helicopter research" and respect the **Nagoya Protocol
 
 ---
 
-## 7. "Verified African" Badge Criteria
+## 8. "Verified African" Badge Criteria
 
 Datasets exhibiting high scientific and metadata quality may be awarded the **"Verified African"** badge by a hub curator. Criteria include:
 - [ ] Confirmed biological collection site within the 54 AU member states.
