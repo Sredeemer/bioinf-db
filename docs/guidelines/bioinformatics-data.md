@@ -24,7 +24,8 @@ The hub exclusively stores and indexes **African bioinformatics datasets** acros
 > The hub does not currently possess the specialized HIPAA/GDPR clinical consent verification and managed-access infrastructure required for human germline or somatic genomic sequencing.
 
 - The metadata validator rejects any push containing `taxon_ids: [9606]` or individual sample rows with human taxonomy.
-- If a dataset studies human-associated pathogens, the taxon ID must represent the **pathogen**, and the `host` column must record human status (`Homo sapiens` or Taxon `9606`).
+- If a dataset studies human-associated pathogens, the taxon ID must represent the **pathogen** (e.g. `562` for *E. coli*, `666` for *V. cholerae*, `1773` for *M. tuberculosis*), and the `host` column must record human status (`Homo sapiens` or Taxon `9606`).
+- **Self-Hosted NCBI Taxonomy Suggestion Service**: The hub exposes an air-gapped, sovereign suggestion service (`GET /api/v1/taxonomy/suggest` and `GET /api/v1/taxonomy/{taxon_id}`) backed by local NCBI taxdump flat files under `/srv/ubuntubio/data/taxonomy/` (`names.dmp`, `nodes.dmp`), completely eliminating external third-party calls to NCBI.
 
 ---
 
