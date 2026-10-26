@@ -8,7 +8,16 @@ from pathlib import Path
 from typing import Any
 
 from ubuntubio.config import settings
+from ubuntubio.indexer.taxonomy_db import taxonomy_db_engine
 from ubuntubio.validator.constants import PROHIBITED_TAXA
+
+__all__ = [
+    "KNOWN_TAXA",
+    "TaxonInfo",
+    "TaxonomyService",
+    "taxonomy_db_engine",
+    "taxonomy_service",
+]
 
 
 @dataclass(frozen=True)
@@ -188,7 +197,6 @@ KNOWN_TAXA: dict[int, TaxonInfo] = {
         common_name="Shigella dysentery",
         domain="bacteria",
     ),
-
     # --- Priority Viral Pathogens ---
     10244: TaxonInfo(
         taxon_id=10244,
@@ -320,7 +328,6 @@ KNOWN_TAXA: dict[int, TaxonInfo] = {
         common_name="HIV-2",
         domain="virus",
     ),
-
     # --- Priority Veterinary Pathogens ---
     10497: TaxonInfo(
         taxon_id=10497,
@@ -362,7 +369,6 @@ KNOWN_TAXA: dict[int, TaxonInfo] = {
         common_name="Rabies virus",
         domain="veterinary",
     ),
-
     # --- Priority Parasites & Vectors ---
     5833: TaxonInfo(
         taxon_id=5833,
@@ -494,7 +500,6 @@ KNOWN_TAXA: dict[int, TaxonInfo] = {
         common_name="Tsetse fly",
         domain="parasite",
     ),
-
     # --- Priority African Crops & Plant Pathogens ---
     185867: TaxonInfo(
         taxon_id=185867,
@@ -616,7 +621,6 @@ KNOWN_TAXA: dict[int, TaxonInfo] = {
         common_name="Teff",
         domain="plant",
     ),
-
     # --- Strictly Prohibited Human Taxon (Catalogued for Clear Blocking & Explanations) ---
     9606: TaxonInfo(
         taxon_id=9606,
@@ -747,6 +751,24 @@ class TaxonomyService:
                 "domain": info.domain,
                 "is_prohibited": is_prohibited,
             }
+
+        # Check SQLite FTS5 database if present
+        if taxonomy_db_engine.exists():
+            db_record = taxonomy_db_engine.get_by_tax_id(taxon_id)
+            if db_record:
+                return {
+                    "taxon_id": db_record["tax_id"],
+                    "scientific_name": db_record["scientific_name"],
+                    "common_name": db_record.get("common_name"),
+                    "rank": db_record.get("rank", "species"),
+                    "genus": None,
+                    "family": None,
+                    "order": None,
+                    "domain": db_record.get("domain"),
+                    "is_prohibited": db_record.get("is_prohibited", False),
+                    "prohibition_reason": db_record.get("prohibition_reason"),
+                }
+
         # Fallback if unknown
         return {
             "taxon_id": taxon_id,
@@ -783,23 +805,44 @@ class TaxonomyService:
         # (excluding 9606)
         if not q:
             default_tids = [
-                10244,   # Monkeypox virus
-                11620,   # Lassa mammarenavirus
-                666,     # Vibrio cholerae
-                1773,    # Mycobacterium tuberculosis
-                5833,    # Plasmodium falciparum
-                562,     # Escherichia coli
-                28901,   # Salmonella enterica
+                10244,  # Monkeypox virus
+                11620,  # Lassa mammarenavirus
+                666,  # Vibrio cholerae
+                1773,  # Mycobacterium tuberculosis
+                5833,  # Plasmodium falciparum
+                562,  # Escherichia coli
+                28901,  # Salmonella enterica
                 186538,  # Zaire ebolavirus
-                11269,   # Marburg virus
-                10497,   # African swine fever virus
-                3983,    # Manihot esculenta (Cassava)
-                4558,    # Sorghum bicolor
+                11269,  # Marburg virus
+                10497,  # African swine fever virus
+                3983,  # Manihot esculenta (Cassava)
+                4558,  # Sorghum bicolor
             ]
             results: list[dict[str, Any]] = []
             for tid in default_tids[:limit]:
                 results.append(self.enrich_taxon(tid))
             return results
+
+        # Query SQLite FTS5 database first if present (supports 2.5M+ organisms with <5ms latency)
+        if q and taxonomy_db_engine.exists():
+            db_res = taxonomy_db_engine.search(q, limit=limit)
+            if db_res:
+                return [
+                    {
+                        "taxon_id": r["tax_id"],
+                        "scientific_name": r["scientific_name"],
+                        "common_name": r.get("common_name"),
+                        "rank": r.get("rank", "species"),
+                        "genus": None,
+                        "family": None,
+                        "order": None,
+                        "domain": r.get("domain"),
+                        "matched_name": r.get("matched_name", r["scientific_name"]),
+                        "is_prohibited": r.get("is_prohibited", False),
+                        "prohibition_reason": r.get("prohibition_reason"),
+                    }
+                    for r in db_res
+                ]
 
         matches: list[tuple[int, TaxonInfo]] = []
 

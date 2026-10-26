@@ -191,7 +191,9 @@ async def get_repository(
     family: list[str] = []
     samples_count = 0
 
-    search_stmt = select(DatasetSearchRecordModel).where(DatasetSearchRecordModel.repo_id == repo.id)
+    search_stmt = select(DatasetSearchRecordModel).where(
+        DatasetSearchRecordModel.repo_id == repo.id
+    )
     search_res = await session.execute(search_stmt)
     search_rec = search_res.scalar_one_or_none()
     if search_rec:

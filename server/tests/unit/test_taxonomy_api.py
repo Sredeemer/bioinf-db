@@ -71,7 +71,7 @@ async def test_api_taxonomy_suggest_defaults() -> None:
         # Default results must include priority African pathogens
         assert 10244 in tids  # Mpox
         assert 11620 in tids  # Lassa
-        assert 666 in tids    # Cholera
+        assert 666 in tids  # Cholera
 
         # 9606 (human) must not be in default suggestions
         assert 9606 not in tids

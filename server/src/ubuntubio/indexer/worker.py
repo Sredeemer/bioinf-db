@@ -12,7 +12,12 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ubuntubio.core.logging import get_logger
-from ubuntubio.db.models import DatasetSearchRecordModel, RepositoryModel, SampleModel, generate_uuid
+from ubuntubio.db.models import (
+    DatasetSearchRecordModel,
+    RepositoryModel,
+    SampleModel,
+    generate_uuid,
+)
 from ubuntubio.git.repo_manager import GitRepoManager
 from ubuntubio.indexer.fts import search_service
 from ubuntubio.indexer.meili import DATASETS_INDEX, SAMPLES_INDEX, MeiliService, meili_service

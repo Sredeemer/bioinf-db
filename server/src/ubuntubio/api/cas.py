@@ -2,8 +2,8 @@ import contextlib
 import os
 import shutil
 import subprocess
-from typing import Any
 import uuid
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -222,12 +222,26 @@ async def commit_files(
             if commit_res.returncode == 0:
                 commit_oid = commit_res.stdout.strip()
                 subprocess.run(
-                    ["git", "-C", str(repo_path), "update-ref", f"refs/heads/{payload.branch}", commit_oid],
+                    [
+                        "git",
+                        "-C",
+                        str(repo_path),
+                        "update-ref",
+                        f"refs/heads/{payload.branch}",
+                        commit_oid,
+                    ],
                     capture_output=True,
                     check=False,
                 )
                 subprocess.run(
-                    ["git", "-C", str(repo_path), "symbolic-ref", "HEAD", f"refs/heads/{payload.branch}"],
+                    [
+                        "git",
+                        "-C",
+                        str(repo_path),
+                        "symbolic-ref",
+                        "HEAD",
+                        f"refs/heads/{payload.branch}",
+                    ],
                     capture_output=True,
                     check=False,
                 )
